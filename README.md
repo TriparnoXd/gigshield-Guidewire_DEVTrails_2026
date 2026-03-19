@@ -295,7 +295,7 @@ gigshield/
 
 ## 👥 Team
 RA2411003010885 Triparno Das
-RA2411003010886 Saksham Thapar
+RA2411003010896 Rishit Asthana
 RA2411003010902 Adrija Dey
 RA2411003010911 Kamya Singhal
 RA2411003010922 Aryan Kadam
