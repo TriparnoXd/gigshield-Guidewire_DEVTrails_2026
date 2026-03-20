@@ -5,7 +5,26 @@ Protecting Zepto & Blinkit delivery partners from income loss due to uncontrolla
 
 ---
 
-##  The Problem
+##  Table of Contents
+
+1. [The Problem](#1-the-problem)
+2. [Persona: The Q-Commerce Delivery Partner](#2-persona-the-q-commerce-delivery-partner)
+3. [Weekly Premium Model](#3-weekly-premium-model)
+4. [Parametric Triggers](#4-parametric-triggers)
+5. [Adversarial Defense & Anti-Spoofing Strategy](#5-adversarial-defense--anti-spoofing-strategy)
+6. [AI/ML Integration Plan](#6-aiml-integration-plan)
+7. [Tech Stack](#7-tech-stack)
+8. [Platform Choice: Mobile App](#8-platform-choice-mobile-app-react-native)
+9. [Application Workflow (Screens)](#9-application-workflow-screens)
+10. [6-Week Development Plan](#10-6-week-development-plan)
+11. [Out of Scope](#11-out-of-scope-by-design)
+12. [Repository Structure](#12-repository-structure)
+13. [Team](#13-team)
+14. [License](#14-license)
+
+---
+
+## 1. The Problem
 
 Zepto and Blinkit delivery partners operate in a high-pressure, time-sensitive environment — delivering groceries and essentials within 10–20 minutes. Unlike food delivery, Q-Commerce workers face unique and compounded disruptions:
 
@@ -20,7 +39,7 @@ When any of these events occur, the worker earns ₹0 — with no protection, no
 
 ---
 
-##  Persona: The Q-Commerce Delivery Partner
+## 2. Persona: The Q-Commerce Delivery Partner
 
 **Name:** Ravi, 27, Zepto delivery partner, Bengaluru (Koramangala zone)
 **Daily Schedule:** 8 AM – 9 PM (avg. 11 active hours, ~30–40 deliveries/day)
@@ -54,7 +73,7 @@ When any of these events occur, the worker earns ₹0 — with no protection, no
 
 ---
 
-## Weekly Premium Model
+## 3. Weekly Premium Model
 
 GigShield is structured entirely on a **weekly pricing model** to match Q-Commerce workers' payout cycles.
 
@@ -90,7 +109,7 @@ Payout is **parametric** — not based on what the worker claims, but on what th
 
 ---
 
-##  Parametric Triggers
+## 4. Parametric Triggers
 
 These are the 5 automated triggers that fire claims — no manual input from worker needed.
 
@@ -115,7 +134,7 @@ if rainfall_mm_per_hour > 15 and zone == worker.active_zone:
 
 ---
 
-##  Adversarial Defense & Anti-Spoofing Strategy
+## 5. Adversarial Defense & Anti-Spoofing Strategy
 ### *GigShield's Response to the Market Crash Event*
 
 > **Scenario:** A coordinated fraud ring using fake GPS spoofing has drained a platform's liquidity pool. 500 fake delivery partners. Real payouts. Simple location verification is dead. GigShield needs to tell the faker from the genuinely stranded worker — without punishing honest ones.
@@ -233,7 +252,7 @@ A fraud ring that drains a liquidity pool does so through **volume × payout siz
 
 ---
 
-##  AI/ML Integration Plan
+## 6. AI/ML Integration Plan
 
 ### 1. Dynamic Premium Calculation (ML Model)
 
@@ -267,7 +286,7 @@ A fraud ring that drains a liquidity pool does so through **volume × payout siz
 
 ---
 
-##  Tech Stack
+## 7. Tech Stack
 
 ### Frontend
 
@@ -318,7 +337,7 @@ A fraud ring that drains a liquidity pool does so through **volume × payout siz
 
 ---
 
-## Platform Choice: Mobile App (React Native)
+## 8. Platform Choice: Mobile App (React Native)
 
 **Justification:**
 - Zepto/Blinkit delivery partners are exclusively smartphone-based workers
@@ -329,7 +348,7 @@ A fraud ring that drains a liquidity pool does so through **volume × payout siz
 
 ---
 
-## Application Workflow (Screens)
+## 9. Application Workflow (Screens)
 
 ```
 1. ONBOARDING
@@ -363,7 +382,7 @@ A fraud ring that drains a liquidity pool does so through **volume × payout siz
 
 ---
 
-## 6-Week Development Plan
+## 10. 6-Week Development Plan
 
 ### Phase 1 (Weeks 1–2): Ideation & Foundation *[Current Phase]*
 
@@ -395,7 +414,7 @@ A fraud ring that drains a liquidity pool does so through **volume × payout siz
 
 ---
 
-## Out of Scope (By Design)
+## 11. Out of Scope (By Design)
 
 In compliance with hackathon constraints, GigShield explicitly excludes:
 
@@ -407,7 +426,7 @@ In compliance with hackathon constraints, GigShield explicitly excludes:
 
 ---
 
-##  Repository Structure
+## 12. Repository Structure
 
 ```
 gigshield/
@@ -430,7 +449,7 @@ gigshield/
 
 ---
 
-##  Team
+## 13. Team
 
 | Roll Number | Name |
 |---|---|
@@ -442,6 +461,6 @@ gigshield/
 
 ---
 
-## License
+## 14. License
 
 MIT License — Built for Guidewire DEVTrails 2026 University Hackathon.
