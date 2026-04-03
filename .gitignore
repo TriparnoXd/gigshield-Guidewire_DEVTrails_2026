@@ -1,0 +1,6 @@
+node_modules/
+venv/
+__pycache__/
+backend/node_modules/
+mock-apis/node_modules/
+ml/venv/
