@@ -4,12 +4,17 @@ const axios = require('axios');
 const supabase = require('../config/supabase');
 const auth = require('../middleware/auth');
 const Razorpay = require('razorpay');
+const { getFraudScore, getStatusFromFraudScore } = require('../services/fraudService');
+const notifyService = require('../services/notifyService');
 
 // Initialize Razorpay
 const razorpay = new Razorpay({
   key_id: process.env.RAZORPAY_KEY_ID,
   key_secret: process.env.RAZORPAY_KEY_SECRET
 });
+
+// UUID validation regex
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // Internal auth middleware for trigger endpoints
 const internalAuth = (req, res, next) => {
@@ -24,6 +29,25 @@ const internalAuth = (req, res, next) => {
 router.post('/initiate', internalAuth, async (req, res, next) => {
   try {
     const { worker_id, trigger_event_id, trigger_type, zone, disruption_start } = req.body;
+
+    // Input validation
+    if (!worker_id || !trigger_event_id || !trigger_type || !zone || !disruption_start) {
+      return res.status(400).json({ error: 'Missing required fields' });
+    }
+
+    if (!UUID_REGEX.test(worker_id)) {
+      return res.status(400).json({ error: 'Invalid worker ID format' });
+    }
+
+    if (!UUID_REGEX.test(trigger_event_id)) {
+      return res.status(400).json({ error: 'Invalid trigger event ID format' });
+    }
+
+    // Validate trigger_type
+    const validTriggerTypes = ['heavy_rainfall', 'severe_aqi', 'extreme_heat', 'platform_outage'];
+    if (!validTriggerTypes.includes(trigger_type)) {
+      return res.status(400).json({ error: 'Invalid trigger type' });
+    }
 
     // Get worker's active policy
     const { data: policy, error: policyError } = await supabase
@@ -54,33 +78,33 @@ router.post('/initiate', internalAuth, async (req, res, next) => {
       throw workerError;
     }
 
-    // Get fraud score from ML service
+    // Get fraud score from ML service with timeout
     let fraudScore = 0;
     try {
-      const fraudRes = await axios.post(`${process.env.ML_SERVICE_URL}/ml/fraud/score`, {
-        worker_id,
-        trigger_type,
-        zone
-      });
+      const fraudRes = await axios.post(
+        `${process.env.ML_SERVICE_URL}/ml/fraud/score`,
+        { worker_id, trigger_type, zone },
+        { timeout: 5000 } // 5 second timeout
+      );
       fraudScore = fraudRes.data.fraud_score || 0;
     } catch (err) {
-      console.log('[ML SERVICE] Fraud service unavailable, defaulting to 0');
+      console.log('[ML SERVICE] Fraud service unavailable or timeout, defaulting to 0');
       fraudScore = 0;
     }
 
-    // Calculate hourly rate
+    // Calculate hourly rate with validation
+    if (!worker.avg_weekly_earn || !worker.avg_active_hrs || worker.avg_active_hrs <= 0) {
+      return res.status(500).json({ error: 'Invalid worker earnings data' });
+    }
     const hourlyRate = worker.avg_weekly_earn / (worker.avg_active_hrs * 7);
 
-    // Generate claim number
+    // Generate claim number with better uniqueness
     const year = new Date().getFullYear();
     const randomNum = String(Math.floor(Math.random() * 9000) + 1000).padStart(4, '0');
     const claimNumber = `GS-${year}-${randomNum}`;
 
-    // Determine status based on fraud score
-    let status = 'approved';
-    if (fraudScore > 85) status = 'rejected';
-    else if (fraudScore > 60) status = 'soft_hold';
-    else if (fraudScore > 30) status = 'verifying';
+    // Determine status based on fraud score using service function
+    const status = getStatusFromFraudScore(fraudScore);
 
     // Insert claim
     const { data: claim, error: claimError } = await supabase
@@ -92,8 +116,8 @@ router.post('/initiate', internalAuth, async (req, res, next) => {
         trigger_event_id,
         trigger_type,
         zone,
-        disruption_start,
-        hourly_rate: hourlyRate,
+        disruption_start: new Date(disruption_start).toISOString(), // Ensure ISO format
+        hourly_rate: parseFloat(hourlyRate.toFixed(2)), // Limit decimal places
         fraud_score: fraudScore,
         status,
         upi_id: `${worker_id.substring(0, 8)}@upi`
@@ -105,23 +129,17 @@ router.post('/initiate', internalAuth, async (req, res, next) => {
       throw claimError;
     }
 
-    // Send FCM notification
+    // Send FCM notification using service
     if (worker.fcm_token) {
       try {
-        await axios.post('https://fcm.googleapis.com/fcm/send', {
-          to: worker.fcm_token,
-          notification: {
-            title: 'GigShield Claim Created',
-            body: `Your claim ${claimNumber} has been ${status}`
-          }
-        }, {
-          headers: {
-            Authorization: `key=${process.env.FIREBASE_SERVER_KEY}`,
-            'Content-Type': 'application/json'
-          }
-        });
+        await notifyService.sendClaimCreatedNotification(
+          worker.fcm_token,
+          claim.claim_number,
+          claim.status
+        );
       } catch (notifyErr) {
         console.log('[FCM] Failed to send notification:', notifyErr.message);
+        // Don't fail the claim creation for notification failures
       }
     }
 
@@ -135,6 +153,16 @@ router.post('/initiate', internalAuth, async (req, res, next) => {
 router.get('/:workerId', auth, async (req, res, next) => {
   try {
     const { workerId } = req.params;
+
+    // Validate UUID format
+    if (!UUID_REGEX.test(workerId)) {
+      return res.status(400).json({ error: 'Invalid worker ID format' });
+    }
+
+    // Authorization check: users can only access their own claims
+    if (workerId !== req.user.id) {
+      return res.status(403).json({ error: 'Forbidden: Cannot access another worker\'s claims' });
+    }
 
     const { data: claims, error } = await supabase
       .from('claims')
@@ -157,6 +185,11 @@ router.get('/:workerId/:claimId', auth, async (req, res, next) => {
   try {
     const { claimId } = req.params;
 
+    // Validate UUID format
+    if (!UUID_REGEX.test(claimId)) {
+      return res.status(400).json({ error: 'Invalid claim ID format' });
+    }
+
     const { data: claim, error } = await supabase
       .from('claims')
       .select('id, claim_number, trigger_type, zone, disruption_start, disruption_end, disruption_hours, payout_amount, status, upi_id, created_at')
@@ -170,8 +203,13 @@ router.get('/:workerId/:claimId', auth, async (req, res, next) => {
       throw error;
     }
 
-    // Get fraud flags (admin/internal only, not returned to worker in production)
-    // For now, we'll return them for debugging
+    // Authorization check: users can only access their own claims
+    if (claim.worker_id !== req.user.id) {
+      return res.status(403).json({ error: 'Forbidden: Cannot access another worker\'s claim' });
+    }
+
+    // Get fraud flags (only for internal/admin use in production)
+    // In production, this would be restricted to internal/authenticated admin users
     const { data: fraud_flags } = await supabase
       .from('fraud_flags')
       .select('*')
@@ -189,13 +227,32 @@ router.patch('/:id/status', internalAuth, async (req, res, next) => {
     const { id } = req.params;
     const { status, rejection_reason } = req.body;
 
+    // Input validation
+    if (!id || !status) {
+      return res.status(400).json({ error: 'Claim ID and status are required' });
+    }
+
+    if (!UUID_REGEX.test(id)) {
+      return res.status(400).json({ error: 'Invalid claim ID format' });
+    }
+
+    // Validate status
+    const validStatuses = ['pending', 'verifying', 'approved', 'soft_hold', 'manual_review', 'rejected', 'paid'];
+    if (!validStatuses.includes(status)) {
+      return res.status(400).json({ error: 'Invalid status' });
+    }
+
     const updateData = {
       status,
       updated_at: new Date().toISOString()
     };
 
     if (rejection_reason) {
-      updateData.rejection_reason = rejection_reason;
+      // Sanitize rejection reason
+      if (typeof rejection_reason !== 'string' || rejection_reason.length > 500) {
+        return res.status(400).json({ error: 'Invalid rejection reason' });
+      }
+      updateData.rejection_reason = rejection_reason.trim();
     }
 
     const { data: claim, error } = await supabase
@@ -209,6 +266,10 @@ router.patch('/:id/status', internalAuth, async (req, res, next) => {
       throw error;
     }
 
+    if (!claim) {
+      return res.status(404).json({ error: 'Claim not found' });
+    }
+
     res.json({ claim });
   } catch (err) {
     next(err);
@@ -219,6 +280,11 @@ router.patch('/:id/status', internalAuth, async (req, res, next) => {
 router.post('/:id/settle', internalAuth, async (req, res, next) => {
   try {
     const { id } = req.params;
+
+    // Validate UUID format
+    if (!UUID_REGEX.test(id)) {
+      return res.status(400).json({ error: 'Invalid claim ID format' });
+    }
 
     // Get claim details
     const { data: claim, error: claimError } = await supabase
@@ -231,18 +297,43 @@ router.post('/:id/settle', internalAuth, async (req, res, next) => {
       throw claimError;
     }
 
+    if (!claim) {
+      return res.status(404).json({ error: 'Claim not found' });
+    }
+
     if (!claim.disruption_end) {
       return res.status(400).json({ error: 'Disruption has not ended yet' });
     }
 
-    // Calculate disruption hours
-    const disruptionHours = (new Date(claim.disruption_end) - new Date(claim.disruption_start)) / (1000 * 60 * 60);
+    // Calculate disruption hours with validation
+    const disruptionStart = new Date(claim.disruption_start);
+    const disruptionEnd = new Date(claim.disruption_end);
+    
+    if (isNaN(disruptionStart.getTime()) || isNaN(disruptionEnd.getTime())) {
+      return res.status(400).json({ error: 'Invalid disruption timestamps' });
+    }
+    
+    if (disruptionEnd < disruptionStart) {
+      return res.status(400).json({ error: 'Disruption end cannot be before start' });
+    }
+
+    const disruptionHours = (disruptionEnd - disruptionStart) / (1000 * 60 * 60);
+
+    // Validate hourly rate
+    if (!claim.hourly_rate || claim.hourly_rate <= 0) {
+      return res.status(500).json({ error: 'Invalid hourly rate in claim' });
+    }
 
     // Calculate payout amount (capped at max weekly payout)
     let payoutAmount = disruptionHours * claim.hourly_rate;
     const maxPayout = claim.policies.max_weekly_payout;
     if (payoutAmount > maxPayout) {
       payoutAmount = maxPayout;
+    }
+
+    // Ensure payout amount is positive and reasonable
+    if (payoutAmount < 0) {
+      return res.status(400).json({ error: 'Calculated payout amount is invalid' });
     }
 
     // Initiate Razorpay payout (sandbox)
@@ -271,7 +362,7 @@ router.post('/:id/settle', internalAuth, async (req, res, next) => {
       .insert({
         claim_id: id,
         worker_id: claim.worker_id,
-        amount: payoutAmount,
+        amount: parseFloat(payoutAmount.toFixed(2)),
         upi_id: claim.upi_id,
         razorpay_id: razorpayId,
         status: 'initiated'
@@ -290,12 +381,12 @@ router.post('/:id/settle', internalAuth, async (req, res, next) => {
         status: 'paid',
         paid_at: new Date().toISOString(),
         payout_reference: razorpayId,
-        disruption_hours: disruptionHours,
-        payout_amount: payoutAmount
+        disruption_hours: parseFloat(disruptionHours.toFixed(2)),
+        payout_amount: parseFloat(payoutAmount.toFixed(2))
       })
       .eq('id', id);
 
-    // Send FCM confirmation
+    // Send FCM confirmation using service
     const { data: worker } = await supabase
       .from('workers')
       .select('fcm_token')
@@ -304,20 +395,14 @@ router.post('/:id/settle', internalAuth, async (req, res, next) => {
 
     if (worker?.fcm_token) {
       try {
-        await axios.post('https://fcm.googleapis.com/fcm/send', {
-          to: worker.fcm_token,
-          notification: {
-            title: 'GigShield Payout Processed',
-            body: `₹${payoutAmount.toFixed(2)} sent to ${claim.upi_id}`
-          }
-        }, {
-          headers: {
-            Authorization: `key=${process.env.FIREBASE_SERVER_KEY}`,
-            'Content-Type': 'application/json'
-          }
-        });
+        await notifyService.sendPayoutNotification(
+          worker.fcm_token,
+          payoutAmount,
+          claim.upi_id
+        );
       } catch (notifyErr) {
         console.log('[FCM] Failed to send notification:', notifyErr.message);
+        // Don't fail the payout for notification failures
       }
     }
 

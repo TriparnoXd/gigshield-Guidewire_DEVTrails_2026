@@ -9,14 +9,14 @@ const axios = require('axios');
  */
 async function getFraudScore(worker_id, trigger_type, zone) {
   try {
-    const res = await axios.post(`${process.env.ML_SERVICE_URL}/ml/fraud/score`, {
-      worker_id,
-      trigger_type,
-      zone
-    });
+    const res = await axios.post(
+      `${process.env.ML_SERVICE_URL}/ml/fraud/score`,
+      { worker_id, trigger_type, zone },
+      { timeout: 5000 } // 5 second timeout
+    );
     return res.data.fraud_score || 0;
   } catch (err) {
-    console.log('[FRAUD SERVICE] ML service unavailable, defaulting to 0');
+    console.log('[FRAUD SERVICE] ML service unavailable or timeout, defaulting to 0');
     return 0;
   }
 }

@@ -8,13 +8,14 @@ const axios = require('axios');
  */
 async function getPremiumMultiplier(worker_id, plan) {
   try {
-    const res = await axios.post(`${process.env.ML_SERVICE_URL}/ml/premium/calculate`, {
-      worker_id,
-      plan
-    });
+    const res = await axios.post(
+      `${process.env.ML_SERVICE_URL}/ml/premium/calculate`,
+      { worker_id, plan },
+      { timeout: 5000 } // 5 second timeout
+    );
     return res.data.multiplier || 1.0;
   } catch (err) {
-    console.log('[PREMIUM SERVICE] ML service unavailable, defaulting to 1.0');
+    console.log('[PREMIUM SERVICE] ML service unavailable or timeout, defaulting to 1.0');
     return 1.0;
   }
 }

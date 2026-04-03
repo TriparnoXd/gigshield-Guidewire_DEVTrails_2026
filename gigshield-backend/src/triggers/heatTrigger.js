@@ -14,72 +14,89 @@ const ZONES = [
 
 const HEAT_THRESHOLD = 45; // degrees Celsius (feels_like)
 
+// Lock to prevent overlapping executions
+let isRunning = false;
+
 async function checkHeat() {
-  for (const zone of ZONES) {
-    try {
-      const res = await axios.get(`${process.env.OPENWEATHER_BASE_URL}/weather`, {
-        params: {
-          lat: zone.lat,
-          lon: zone.lon,
-          appid: process.env.OPENWEATHER_API_KEY,
-          units: 'metric'
-        }
-      });
+  // Prevent overlapping executions
+  if (isRunning) {
+    console.log('[TRIGGER] Heat check already running, skipping');
+    return;
+  }
+  
+  isRunning = true;
+  
+  try {
+    for (const zone of ZONES) {
+      try {
+        const res = await axios.get(`${process.env.OPENWEATHER_BASE_URL}/weather`, {
+          params: {
+            lat: zone.lat,
+            lon: zone.lon,
+            appid: process.env.OPENWEATHER_API_KEY,
+            units: 'metric'
+          },
+          timeout: 10000 // 10 second timeout
+        });
 
-      const feelsLike = res.data.main?.feels_like;
-      if (!feelsLike) continue;
+        const feelsLike = res.data.main?.feels_like;
+        if (!feelsLike) continue;
 
-      if (feelsLike > HEAT_THRESHOLD) {
-        const redisKey = `trigger:heat:${zone.name}`;
-        const existing = await redis.get(redisKey);
+        if (feelsLike > HEAT_THRESHOLD) {
+          const redisKey = `trigger:heat:${zone.name}`;
+          const existing = await redis.get(redisKey);
 
-        if (!existing) {
-          const { data: triggerEvent } = await supabase
-            .from('trigger_events')
-            .insert({
+          if (!existing) {
+            const { data: triggerEvent } = await supabase
+              .from('trigger_events')
+              .insert({
+                trigger_type: 'extreme_heat',
+                zone: zone.name,
+                reading_value: feelsLike,
+                reading_unit: '°C',
+                threshold_value: HEAT_THRESHOLD,
+                disruption_start: new Date().toISOString(),
+                is_active: true,
+                data_source: 'openweathermap'
+              })
+              .select()
+              .single();
+
+            await redis.setex(redisKey, 7200, triggerEvent.id);
+
+            await redis.lpush('claims:queue', JSON.stringify({
+              trigger_event_id: triggerEvent.id,
               trigger_type: 'extreme_heat',
               zone: zone.name,
-              reading_value: feelsLike,
-              reading_unit: '°C',
-              threshold_value: HEAT_THRESHOLD,
-              disruption_start: new Date().toISOString(),
-              is_active: true,
-              data_source: 'openweathermap'
-            })
-            .select()
-            .single();
+              disruption_start: triggerEvent.disruption_start
+            }));
 
-          await redis.setex(redisKey, 7200, triggerEvent.id);
+            console.log(`[TRIGGER] Extreme heat in ${zone.name}: ${feelsLike}°C (feels like)`);
+          }
+        } else {
+          const redisKey = `trigger:heat:${zone.name}`;
+          const triggerEventId = await redis.get(redisKey);
 
-          await redis.lpush('claims:queue', JSON.stringify({
-            trigger_event_id: triggerEvent.id,
-            trigger_type: 'extreme_heat',
-            zone: zone.name,
-            disruption_start: triggerEvent.disruption_start
-          }));
+          if (triggerEventId) {
+            await supabase
+              .from('trigger_events')
+              .update({
+                disruption_end: new Date().toISOString(),
+                is_active: false
+              })
+              .eq('id', triggerEventId);
 
-          console.log(`[TRIGGER] Extreme heat in ${zone.name}: ${feelsLike}°C (feels like)`);
+            await redis.del(redisKey);
+            console.log(`[TRIGGER] Heat cleared in ${zone.name}`);
+          }
         }
-      } else {
-        const redisKey = `trigger:heat:${zone.name}`;
-        const triggerEventId = await redis.get(redisKey);
-
-        if (triggerEventId) {
-          await supabase
-            .from('trigger_events')
-            .update({
-              disruption_end: new Date().toISOString(),
-              is_active: false
-            })
-            .eq('id', triggerEventId);
-
-          await redis.del(redisKey);
-          console.log(`[TRIGGER] Heat cleared in ${zone.name}`);
-        }
+      } catch (err) {
+        console.error(`[TRIGGER ERROR] Heat check failed for ${zone.name}:`, err.message);
+        // Continue with other zones even if one fails
       }
-    } catch (err) {
-      console.error(`[TRIGGER ERROR] Heat check failed for ${zone.name}:`, err.message);
     }
+  } finally {
+    isRunning = false;
   }
 }
 

@@ -21,11 +21,14 @@ async function sendPushNotification(fcmToken, title, body) {
       headers: {
         Authorization: `key=${process.env.FIREBASE_SERVER_KEY}`,
         'Content-Type': 'application/json'
-      }
+      },
+      timeout: 5000 // 5 second timeout
     });
     console.log('[NOTIFY] Push notification sent successfully');
   } catch (err) {
     console.log('[NOTIFY] Failed to send notification:', err.message);
+    // Re-throw error for callers who want to handle it
+    throw err;
   }
 }
 

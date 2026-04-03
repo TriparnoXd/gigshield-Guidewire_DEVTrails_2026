@@ -14,71 +14,87 @@ const ZONES = [
 
 const OUTAGE_DURATION_THRESHOLD = 60; // minutes
 
+// Lock to prevent overlapping executions
+let isRunning = false;
+
 async function checkOutage() {
-  for (const zone of ZONES) {
-    try {
-      // Call mock platform status API
-      const res = await axios.get('http://localhost:3001/mock/platform-status', {
-        timeout: 5000
-      });
+  // Prevent overlapping executions
+  if (isRunning) {
+    console.log('[TRIGGER] Outage check already running, skipping');
+    return;
+  }
+  
+  isRunning = true;
+  
+  try {
+    for (const zone of ZONES) {
+      try {
+        // Call mock platform status API
+        const res = await axios.get('http://localhost:3001/mock/platform-status', {
+          timeout: 5000
+        });
 
-      const { status, since } = res.data;
+        const { status, since } = res.data;
 
-      const redisKey = `trigger:outage:${zone}`;
-      const existing = await redis.get(redisKey);
+        const redisKey = `trigger:outage:${zone}`;
+        const existing = await redis.get(redisKey);
 
-      if (status === 'down') {
-        // Calculate outage duration
-        const outageStart = new Date(since);
-        const now = new Date();
-        const durationMinutes = (now - outageStart) / (1000 * 60);
+        if (status === 'down') {
+          // Calculate outage duration
+          const outageStart = new Date(since);
+          const now = new Date();
+          const durationMinutes = (now - outageStart) / (1000 * 60);
 
-        if (durationMinutes > OUTAGE_DURATION_THRESHOLD && !existing) {
-          const { data: triggerEvent } = await supabase
-            .from('trigger_events')
-            .insert({
+          if (durationMinutes > OUTAGE_DURATION_THRESHOLD && !existing) {
+            const { data: triggerEvent } = await supabase
+              .from('trigger_events')
+              .insert({
+                trigger_type: 'platform_outage',
+                zone: zone,
+                reading_value: durationMinutes,
+                reading_unit: 'minutes',
+                threshold_value: OUTAGE_DURATION_THRESHOLD,
+                disruption_start: since,
+                is_active: true,
+                data_source: 'mock_platform_api'
+              })
+              .select()
+              .single();
+
+            await redis.setex(redisKey, 7200, triggerEvent.id);
+
+            await redis.lpush('claims:queue', JSON.stringify({
+              trigger_event_id: triggerEvent.id,
               trigger_type: 'platform_outage',
               zone: zone,
-              reading_value: durationMinutes,
-              reading_unit: 'minutes',
-              threshold_value: OUTAGE_DURATION_THRESHOLD,
-              disruption_start: since,
-              is_active: true,
-              data_source: 'mock_platform_api'
+              disruption_start: since
+            }));
+
+            console.log(`[TRIGGER] Platform outage in ${zone}: ${Math.floor(durationMinutes)} min`);
+          }
+        } else if (status === 'up' && existing) {
+          // Outage resolved
+          await supabase
+            .from('trigger_events')
+            .update({
+              disruption_end: new Date().toISOString(),
+              is_active: false
             })
-            .select()
-            .single();
+            .eq('id', existing);
 
-          await redis.setex(redisKey, 7200, triggerEvent.id);
-
-          await redis.lpush('claims:queue', JSON.stringify({
-            trigger_event_id: triggerEvent.id,
-            trigger_type: 'platform_outage',
-            zone: zone,
-            disruption_start: since
-          }));
-
-          console.log(`[TRIGGER] Platform outage in ${zone}: ${Math.floor(durationMinutes)} min`);
+          await redis.del(redisKey);
+          console.log(`[TRIGGER] Platform outage cleared in ${zone}`);
         }
-      } else if (status === 'up' && existing) {
-        // Outage resolved
-        await supabase
-          .from('trigger_events')
-          .update({
-            disruption_end: new Date().toISOString(),
-            is_active: false
-          })
-          .eq('id', existing);
-
-        await redis.del(redisKey);
-        console.log(`[TRIGGER] Platform outage cleared in ${zone}`);
-      }
-    } catch (err) {
-      // Only log as error if it's not connection refused (mock API might not be running)
-      if (err.code !== 'ECONNREFUSED') {
-        console.error(`[TRIGGER ERROR] Outage check failed for ${zone}:`, err.message);
+      } catch (err) {
+        // Only log as error if it's not connection refused (mock API might not be running)
+        if (err.code !== 'ECONNREFUSED') {
+          console.error(`[TRIGGER ERROR] Outage check failed for ${zone}:`, err.message);
+        }
+        // Continue with other zones even if one fails
       }
     }
+  } finally {
+    isRunning = false;
   }
 }
 
