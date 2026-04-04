@@ -1,4 +1,4 @@
-# GigShield — AI-Powered Parametric Income Insurance for Q-Commerce Delivery Partners
+#  PayGuard-GigShield — AI-Powered Parametric Income Insurance for Q-Commerce Delivery Partners
 
 **Guidewire DEVTrails 2026 | University Hackathon**
 Protecting Zepto & Blinkit delivery partners from income loss due to uncontrollable external disruptions.
