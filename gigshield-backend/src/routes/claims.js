@@ -6,12 +6,19 @@ const Razorpay = require('razorpay');
 const { getFraudScore, getStatusFromFraudScore } = require('../services/fraudService');
 const notifyService = require('../services/notifyService');
 
-// Initialize Razorpay
-const razorpay = new Razorpay({
-  key_id: process.env.RAZORPAY_KEY_ID,
-  key_secret: process.env.RAZORPAY_KEY_SECRET
-});
+// Initialize Razorpay (only if credentials are available)
+let razorpay = null;
+const keyId = process.env.RAZORPAY_KEY_ID || '';
+const keySecret = process.env.RAZORPAY_KEY_SECRET || '';
 
+if (keyId && keySecret) {
+  razorpay = new Razorpay({
+    key_id: keyId,
+    key_secret: keySecret
+  });
+}
+
+// UUID validation regex
 // UUID validation regex
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
