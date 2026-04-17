@@ -1,0 +1,43 @@
+services:
+  - type: web
+    name: payguard-backend
+    runtime: docker
+    dockerfilePath: ./gigshield-backend/Dockerfile
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "3000"
+      - key: ML_SERVICE_URL
+        value: http://payguard-ml-service:8000
+      - key: REDIS_URL
+        value: redis://payguard-redis:6379
+      - key: RAZORPAY_KEY_ID
+        scope: build
+      - key: RAZORPAY_KEY_SECRET
+        scope: build
+      - key: SUPABASE_URL
+        scope: build
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        scope: build
+
+  - type: web
+    name: payguard-ml-service
+    runtime: docker
+    dockerfilePath: ./model/Dockerfile
+    envVars:
+      - key: PORT
+        value: "8000"
+
+  - type: web
+    name: payguard-mobile-web
+    runtime: docker
+    dockerfilePath: ./mobile/Dockerfile
+    envVars:
+      - key: PORT
+        value: "80"
+
+  - type: redis
+    name: payguard-redis
+    version: "7"
+    plan: free
