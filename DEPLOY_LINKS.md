@@ -15,14 +15,15 @@
 
 Your deployed link: `https://<project-name>.up.railway.app`
 
-### Option 2: Render (Free)
+### Option 2: Render (Recommended - One-Click)
 1. Go to: https://render.com
 2. Sign up with GitHub
-3. New → Web Service
-4. Select repo and Dockerfile
-5. Deploy
+3. New → Blueprint
+4. Select this repository.
+5. Enter your environment variables when prompted.
+6. Click **Apply**.
 
-Your link: `https://payguard-backend.onrender.com`
+Your link: https://mobile-web.onrender.com
 
 ### Option 3: Local (Works Now)
 ```bash
@@ -33,5 +34,5 @@ Frontend: http://localhost:4000
 ## GitHub
 https://github.com/TriparnoXd/PayGaurd-GigShield-Devtrails
 
-## Docker Hub
-https://hub.docker.com/u/aryan2204
+## GitHub Container Registry (GHCR)
+Images are automatically pushed to GHCR on every push to main.
