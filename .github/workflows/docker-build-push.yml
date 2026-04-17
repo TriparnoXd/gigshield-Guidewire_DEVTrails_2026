@@ -15,12 +15,15 @@ jobs:
         include:
           - service: backend
             context: ./gigshield-backend
+            dockerfile: ./gigshield-backend/Dockerfile
             image: aryan2204/payguard-backend
           - service: ml-service
             context: ./model
+            dockerfile: ./model/Dockerfile
             image: aryan2204/payguard-ml-service
           - service: mobile-web
             context: ./mobile
+            dockerfile: ./mobile/Dockerfile
             image: aryan2204/payguard-mobile-web
 
     steps:
@@ -40,6 +43,7 @@ jobs:
         uses: docker/build-push-action@v5
         with:
           context: ${{ matrix.context }}
+          file: ${{ matrix.dockerfile }}
           push: true
           tags: |
             ${{ matrix.image }}:latest
