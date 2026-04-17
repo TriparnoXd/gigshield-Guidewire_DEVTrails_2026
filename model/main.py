@@ -41,6 +41,7 @@ class PremiumOutput(BaseModel):
 
 
 @app.get("/health")
+@app.get("/ml/health")
 def health():
     return {"status": "healthy", "model_loaded": model_loaded}
 

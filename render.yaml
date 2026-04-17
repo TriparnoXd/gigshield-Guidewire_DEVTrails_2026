@@ -24,6 +24,14 @@ services:
         sync: false
       - key: SUPABASE_ANON_KEY
         sync: false
+      - key: OPENWEATHER_API_KEY
+        sync: false
+      - key: OPENAQ_BASE_URL
+        value: https://api.openaq.org/v2
+      - key: FIREBASE_SERVER_KEY
+        sync: false
+      - key: INTERNAL_KEY
+        value: internal-secret-key
 
   - type: web
     name: ml-service
