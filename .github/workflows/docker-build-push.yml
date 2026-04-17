@@ -1,12 +1,29 @@
-name: CI CD Disabled
+name: Build and Push Docker Images
 
 on:
   push:
     branches:
       - main
+      - develop
 
 jobs:
-  disabled:
+  build-and-push:
     runs-on: ubuntu-latest
+
     steps:
-      - run: echo "Using manual Docker push"
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v2
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v4
+        with:
+          context: .
+          push: true
+          tags: ghcr.io/${{ github.repository_owner }}/paygaurd-gigshield-devtrails:latest
