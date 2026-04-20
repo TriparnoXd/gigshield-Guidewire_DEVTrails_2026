@@ -14,6 +14,20 @@ const PLAN_CONFIG = {
   pro: { base: 99, max_payout: 1400, max_hours: 22 }
 };
 
+// GET /policies/plans - Get available plans
+router.get('/plans', async (req, res, next) => {
+  try {
+    const plans = Object.entries(PLAN_CONFIG).map(([id, config]) => ({
+      id,
+      ...config,
+      name: id.charAt(0).toUpperCase() + id.slice(1) + ' Plan'
+    }));
+    res.json({ plans });
+  } catch (err) {
+    next(err);
+  }
+});
+
 // POST /policies/create - Create new policy
 router.post('/create', auth, async (req, res, next) => {
   try {

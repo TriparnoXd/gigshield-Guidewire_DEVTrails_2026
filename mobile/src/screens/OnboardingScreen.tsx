@@ -11,6 +11,7 @@ import {
 import { colors, typography, spacing, borderRadius, shadows } from '../theme';
 import { Input, Button } from '../components';
 import { useUserStore } from '../store';
+import { api } from '../api/client';
 
 interface HubOption {
   id: string;
@@ -22,6 +23,7 @@ export const OnboardingScreen: React.FC<{ navigation: any }> = ({ navigation }) 
   const [mobileNumber, setMobileNumber] = useState('');
   const [riderId, setRiderId] = useState('');
   const [selectedHub, setSelectedHub] = useState<string>('south-delhi');
+  const [isLoading, setIsLoading] = useState(false);
 
   const setUser = useUserStore((state) => state.setUser);
 
@@ -36,14 +38,33 @@ export const OnboardingScreen: React.FC<{ navigation: any }> = ({ navigation }) 
     setSelectedHub(hubId);
   };
 
-  const handleSecureIncome = () => {
-    setUser({
-      phoneNumber: `+91 ${mobileNumber}`,
-      riderId,
-      hub: selectedHub,
-      isVerified: false,
-    });
-    navigation.navigate('OTPVerification', { phoneNumber: `+91 ${mobileNumber}` });
+  const handleSecureIncome = async () => {
+    if (!mobileNumber || !riderId) {
+      alert('Please fill in all fields');
+      return;
+    }
+
+    setIsLoading(true);
+    const fullPhone = `+91${mobileNumber}`;
+
+    try {
+      console.log(`[Onboarding] Sending OTP to ${fullPhone}`);
+      await api.auth.sendOtp(fullPhone);
+
+      setUser({
+        phoneNumber: fullPhone,
+        riderId,
+        hub: selectedHub,
+        isVerified: false,
+      });
+
+      navigation.navigate('OTPVerification', { phoneNumber: fullPhone });
+    } catch (error: any) {
+      console.error('[Onboarding] Error sending OTP:', error);
+      alert(error.response?.data?.error || 'Failed to send OTP. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -130,9 +151,11 @@ export const OnboardingScreen: React.FC<{ navigation: any }> = ({ navigation }) 
           <View style={styles.ctaContainer}>
             <Button
               title="Secure My Income"
-              onPress={handleSecureIncome}
+              onPress={() => handleSecureIncome()}
               variant="primary"
               size="lg"
+              loading={isLoading}
+              disabled={isLoading}
               icon={<Text style={styles.buttonIcon}>🛡️</Text>}
             />
             <Text style={styles.legalText}>
