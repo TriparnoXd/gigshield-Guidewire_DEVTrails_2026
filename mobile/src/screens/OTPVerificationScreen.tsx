@@ -10,6 +10,7 @@ import {
 import { colors, typography, spacing, borderRadius } from '../theme';
 import { Button, OTPInput } from '../components';
 import { useUserStore } from '../store';
+import { api } from '../api/client';
 
 interface OTPVerificationScreenProps {
   navigation: any;
@@ -27,7 +28,9 @@ export const OTPVerificationScreen: React.FC<OTPVerificationScreenProps> = ({
   const [isVerifying, setIsVerifying] = useState(false);
 
   const setUser = useUserStore((state) => state.setUser);
+  const setToken = useUserStore((state) => state.setToken);
   const setVerified = useUserStore((state) => state.setVerified);
+  const user = useUserStore((state) => state.user);
 
   useEffect(() => {
     if (timer > 0) {
@@ -44,13 +47,36 @@ export const OTPVerificationScreen: React.FC<OTPVerificationScreenProps> = ({
     setOtp(code);
   };
 
-  const handleVerify = () => {
+  const handleVerify = async () => {
+    if (otp.length < 6) return;
+
     setIsVerifying(true);
-    setTimeout(() => {
-      setIsVerifying(false);
+    console.log(`[OTP] Verifying code ${otp} for ${phoneNumber}`);
+
+    try {
+      const response = await api.auth.verifyOtp(phoneNumber, otp);
+      const { access_token, worker } = response.data;
+
+      console.log('[OTP] Verification successful', { workerId: worker.id });
+
+      // Update store with token and worker info
+      setToken(access_token);
+      if (user) {
+        setUser({
+          ...user,
+          id: worker.id,
+          isVerified: true
+        });
+      }
+
       setVerified(true);
       navigation.navigate('ProtectionPlans');
-    }, 1500);
+    } catch (error: any) {
+      console.error('[OTP] Verification failed:', error);
+      alert(error.response?.data?.error || 'Invalid OTP. Please try again.');
+    } finally {
+      setIsVerifying(false);
+    }
   };
 
   const handleResend = () => {

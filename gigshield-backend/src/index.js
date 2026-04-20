@@ -22,7 +22,10 @@ const { processClaimsQueue } = require('./services/claimsQueueWorker');
 processClaimsQueue();
 
 const app = express();
-app.use(cors());
+app.use(cors({
+  origin: 'http://localhost:4000',
+  credentials: true
+}));
 app.use(express.json());
 
 // Request ID middleware for tracing
